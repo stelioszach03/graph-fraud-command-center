@@ -2,6 +2,14 @@
 
 Real-time graph-native fraud ring detection system designed for applied ML/DL portfolios.
 
+Live endpoints:
+
+- Project page: `https://stelioszach.com/aegis-graph-fraud-gnn/`
+- API health: `https://stelioszach.com/aegis-graph-fraud-gnn/live/health`
+- API docs: `https://stelioszach.com/aegis-graph-fraud-gnn/live/docs`
+- Grafana: `https://stelioszach.com/aegis-graph-fraud-gnn/monitoring/`
+- Prometheus: `https://stelioszach.com/aegis-graph-fraud-gnn/prometheus/`
+
 ## Highlights
 
 - Streaming transaction scoring with graph context.
@@ -27,6 +35,7 @@ flowchart LR
 ## Core API
 
 - `GET /health`
+- `GET /metrics`
 - `POST /api/v1/score`
 - `POST /api/v1/simulate?events=250`
 - `GET /api/v1/graph/summary`
@@ -80,6 +89,29 @@ docker compose up -d --build
 
 Exposed API: `http://localhost:18910`.
 
+Run with monitoring stack:
+
+```bash
+docker compose --profile monitoring up -d --build
+```
+
+Monitoring endpoints:
+
+- Prometheus: `http://localhost:19020`
+- Grafana: `http://localhost:19030` (admin/admin)
+
+VPS deployment profile:
+
+```bash
+docker compose -f docker-compose.vps.yml up -d --build
+```
+
+VPS exposed ports:
+
+- API: `18910`
+- Prometheus: `18920`
+- Grafana: `18930`
+
 ## Project Structure
 
 ```text
@@ -88,7 +120,33 @@ ml/         PyTorch model and self-supervised pretraining modules
 scripts/    Training and smoke utilities
 tests/      API tests
 docker/     Container build files
+monitoring/ Prometheus + Grafana provisioning
 ```
+
+## Benchmark
+
+Run reproducible benchmark:
+
+```bash
+python3 scripts/benchmark.py --base-url http://localhost:18910 --requests 2500 --out benchmarks/benchmark_2026-02-28.json
+```
+
+The script reports:
+
+- throughput (RPS)
+- latency `mean/p50/p95/p99/max`
+- success rate
+- high-risk ratio
+
+Latest benchmark snapshot (`2026-02-28`, final VPS deployment state):
+
+- requests: `2500`
+- success rate: `100%` (2500/2500)
+- throughput: `457.402 rps`
+- latency mean/p50/p95/p99/max: `2.169ms / 1.987ms / 3.270ms / 4.821ms / 85.213ms`
+- high-risk ratio: `0.8604`
+
+Raw output: `benchmarks/benchmark_2026-02-28.json`
 
 ## Roadmap
 

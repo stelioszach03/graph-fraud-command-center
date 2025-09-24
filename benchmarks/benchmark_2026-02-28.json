@@ -1,0 +1,17 @@
+{
+  "timestamp_utc": "2026-02-28T21:47:20Z",
+  "base_url": "http://localhost:18910",
+  "requests_total": 2500,
+  "ok": 2500,
+  "errors": 0,
+  "success_rate": 1.0,
+  "throughput_rps": 457.402,
+  "latency_ms": {
+    "mean": 2.169,
+    "p50": 1.987,
+    "p95": 3.27,
+    "p99": 4.821,
+    "max": 85.213
+  },
+  "high_risk_ratio": 0.8604
+}
