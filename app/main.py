@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 from time import perf_counter
 from uuid import uuid4
 
-from fastapi import FastAPI, Query, Response, Request
+from fastapi import FastAPI, Query, Request, Response
 
 from app.metrics import record_http, record_score, render_metrics, set_graph_gauges
 from app.schemas import AlertItem, GraphSummary, ScoreRequest, ScoreResponse, SimulateResponse
@@ -13,11 +13,14 @@ from app.services.scoring import FraudScoringService
 from app.services.simulator import generate_stream
 from app.settings import get_settings
 
-
 settings = get_settings()
 app = FastAPI(title="Aegis Graph Fraud GNN", version=settings.APP_VERSION)
 store = GraphStore()
-scorer = FraudScoringService(store=store, model_path=settings.MODEL_PATH, alert_min_score=settings.ALERT_MIN_SCORE)
+scorer = FraudScoringService(
+    store=store,
+    model_path=settings.MODEL_PATH,
+    alert_min_score=settings.ALERT_MIN_SCORE,
+)
 
 
 @app.middleware("http")
@@ -50,6 +53,8 @@ def health() -> dict:
         "status": "ok",
         "service": "aegis-graph-fraud-gnn",
         "timestamp_utc": datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z"),
+        "model_loaded": scorer.model is not None,
+        "alert_min_score": settings.ALERT_MIN_SCORE,
     }
 
 
@@ -67,7 +72,11 @@ def score_transaction(payload: ScoreRequest) -> ScoreResponse:
         timestamp_utc=payload.timestamp_utc or datetime.now(timezone.utc),
     )
     result = scorer.score(tx)
-    record_score(score=float(result["risk_score"]), high_risk=float(result["risk_score"]) >= settings.ALERT_MIN_SCORE)
+    risk_score = float(result["risk_score"])
+    record_score(
+        score=risk_score,
+        high_risk=risk_score >= settings.ALERT_MIN_SCORE,
+    )
     set_graph_gauges(store.summary())
     return ScoreResponse(**result)
 
@@ -81,7 +90,7 @@ def graph_summary() -> GraphSummary:
 
 @app.get("/api/v1/alerts", response_model=list[AlertItem])
 def alerts(
-    min_score: float = Query(default=0.82, ge=0.0, le=1.0),
+    min_score: float = Query(default=settings.ALERT_MIN_SCORE, ge=0.0, le=1.0),
     limit: int = Query(default=25, ge=1, le=200),
 ) -> list[AlertItem]:
     rows = store.latest_alerts(min_score=float(min_score), limit=int(limit))
@@ -89,15 +98,19 @@ def alerts(
 
 
 @app.post("/api/v1/simulate", response_model=SimulateResponse)
-def simulate(events: int = Query(default=250, ge=1, le=5000)) -> SimulateResponse:
-    generated = generate_stream(n=events)
+def simulate(
+    events: int = Query(default=250, ge=1, le=5000),
+    seed: int | None = Query(default=None, ge=0, le=2_147_483_647),
+) -> SimulateResponse:
+    generated = generate_stream(n=events, seed=seed)
     alerts_before = len(store.alerts)
 
     for tx in generated:
         score_payload = scorer.score(tx)
+        risk_score = float(score_payload["risk_score"])
         record_score(
-            score=float(score_payload["risk_score"]),
-            high_risk=float(score_payload["risk_score"]) >= settings.ALERT_MIN_SCORE,
+            score=risk_score,
+            high_risk=risk_score >= settings.ALERT_MIN_SCORE,
         )
 
     alerts_after = len(store.alerts)

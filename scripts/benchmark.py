@@ -32,7 +32,12 @@ def _payload(i: int) -> dict:
 
 def _post_json(url: str, payload: dict, timeout: float) -> tuple[int, dict | None]:
     body = json.dumps(payload).encode("utf-8")
-    req = urllib.request.Request(url=url, data=body, headers={"Content-Type": "application/json"}, method="POST")
+    req = urllib.request.Request(
+        url=url,
+        data=body,
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
     try:
         with urllib.request.urlopen(req, timeout=timeout) as resp:
             raw = resp.read().decode("utf-8")

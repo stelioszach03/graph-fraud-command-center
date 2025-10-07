@@ -12,22 +12,21 @@ from .explain import reasons_from_contributions, top_features
 from .feature_engineering import FEATURE_ORDER, build_edge_features
 from .graph_store import GraphStore, TxEvent
 
-
 HEURISTIC_WEIGHTS: dict[str, float] = {
-    "log_amount": 0.18,
-    "amount_z": 0.62,
-    "sender_out_degree": 0.06,
-    "receiver_in_degree": 0.05,
-    "sender_velocity_10m": 0.28,
-    "receiver_velocity_10m": 0.21,
-    "is_new_pair": 0.43,
-    "has_reverse_edge": 0.54,
-    "cross_border": 0.39,
-    "channel_risk": 0.45,
-    "sender_receiver_flow_ratio": 0.22,
-    "shared_counterparties": 0.13,
-    "sender_new_account": 0.26,
-    "receiver_new_account": 0.26,
+    "log_amount": 0.32,
+    "amount_z": 0.90,
+    "sender_out_degree": 0.12,
+    "receiver_in_degree": 0.12,
+    "sender_velocity_10m": 0.45,
+    "receiver_velocity_10m": 0.35,
+    "is_new_pair": 0.50,
+    "has_reverse_edge": 0.70,
+    "cross_border": 0.50,
+    "channel_risk": 0.55,
+    "sender_receiver_flow_ratio": 0.28,
+    "shared_counterparties": 0.24,
+    "sender_new_account": 0.30,
+    "receiver_new_account": 0.30,
 }
 
 
@@ -69,7 +68,7 @@ class FraudScoringService:
             return None
 
     def _heuristic_score(self, feature_map: dict[str, float]) -> tuple[float, list[tuple[str, float]]]:
-        raw = -2.05
+        raw = -1.30
         weighted: list[tuple[str, float]] = []
         for name in FEATURE_ORDER:
             value = float(feature_map.get(name, 0.0))
@@ -77,7 +76,9 @@ class FraudScoringService:
             contribution = w * value
             raw += contribution
             weighted.append((name, contribution))
-        return _clip01(_sigmoid(raw)), weighted
+
+        calibrated = _sigmoid(raw / 1.15)
+        return _clip01(calibrated), weighted
 
     def _model_score(self, vector: np.ndarray) -> float | None:
         if self.model is None:
@@ -96,10 +97,11 @@ class FraudScoringService:
         if model_score is None:
             final = heuristic_score
         else:
-            final = _clip01(0.62 * heuristic_score + 0.38 * model_score)
+            final = _clip01(0.85 * heuristic_score + 0.15 * model_score)
 
         band = _risk_band(final)
         reasons = reasons_from_contributions(weighted=weighted, feature_map=feature_map)
+        processed_at_utc = datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
 
         payload = {
             "tx_id": event.tx_id,
@@ -109,7 +111,7 @@ class FraudScoringService:
             "heuristic_score": round(heuristic_score, 6),
             "reasons": reasons,
             "top_features": top_features(feature_map),
-            "processed_at_utc": datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z"),
+            "processed_at_utc": processed_at_utc,
             "sender_id": event.sender_id,
             "receiver_id": event.receiver_id,
             "amount": float(event.amount),

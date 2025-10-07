@@ -6,7 +6,6 @@ import numpy as np
 
 from .graph_store import GraphStore, TxEvent
 
-
 CHANNEL_RISK = {
     "wire": 0.62,
     "ach": 0.35,
@@ -33,9 +32,13 @@ FEATURE_ORDER = [
 ]
 
 
+def _clip(value: float, low: float, high: float) -> float:
+    return float(min(high, max(low, value)))
+
+
 def build_edge_features(store: GraphStore, event: TxEvent) -> tuple[np.ndarray, dict[str, float]]:
     mean, std = store.sender_amount_stats(event.sender_id)
-    amount_z = (float(event.amount) - mean) / max(std, 1.0)
+    amount_z_raw = (float(event.amount) - mean) / max(std, 1.0)
 
     sender_out = float(store.out_degree(event.sender_id))
     receiver_in = float(store.in_degree(event.receiver_id))
@@ -59,18 +62,18 @@ def build_edge_features(store: GraphStore, event: TxEvent) -> tuple[np.ndarray, 
     receiver_new = 1.0 if 0.0 < receiver_age < 3600.0 else 0.0
 
     feature_map = {
-        "log_amount": float(log1p(max(event.amount, 0.0))),
-        "amount_z": float(amount_z),
-        "sender_out_degree": sender_out,
-        "receiver_in_degree": receiver_in,
-        "sender_velocity_10m": sender_vel,
-        "receiver_velocity_10m": receiver_vel,
+        "log_amount": _clip(log1p(max(event.amount, 0.0)) / 11.5, 0.0, 1.2),
+        "amount_z": _clip((amount_z_raw + 1.0) / 6.0, 0.0, 1.2),
+        "sender_out_degree": _clip(sender_out / 40.0, 0.0, 1.0),
+        "receiver_in_degree": _clip(receiver_in / 40.0, 0.0, 1.0),
+        "sender_velocity_10m": _clip(sender_vel / 20.0, 0.0, 1.0),
+        "receiver_velocity_10m": _clip(receiver_vel / 20.0, 0.0, 1.0),
         "is_new_pair": is_new_pair,
         "has_reverse_edge": has_reverse,
         "cross_border": cross_border,
         "channel_risk": float(CHANNEL_RISK.get(event.channel, 0.45)),
-        "sender_receiver_flow_ratio": float(flow_ratio),
-        "shared_counterparties": shared,
+        "sender_receiver_flow_ratio": _clip(log1p(flow_ratio) / 4.5, 0.0, 1.0),
+        "shared_counterparties": _clip(shared / 8.0, 0.0, 1.0),
         "sender_new_account": sender_new,
         "receiver_new_account": receiver_new,
     }
