@@ -36,9 +36,26 @@ def _clip(value: float, low: float, high: float) -> float:
     return float(min(high, max(low, value)))
 
 
-def build_edge_features(store: GraphStore, event: TxEvent) -> tuple[np.ndarray, dict[str, float]]:
-    mean, std = store.sender_amount_stats(event.sender_id)
-    amount_z_raw = (float(event.amount) - mean) / max(std, 1.0)
+def build_edge_features(
+    store: GraphStore,
+    event: TxEvent,
+    *,
+    amount_z_warmup_events: int = 6,
+) -> tuple[np.ndarray, dict[str, float]]:
+    sender_mean, sender_std = store.sender_amount_stats(event.sender_id)
+    sender_seen = store.sender_event_count(event.sender_id)
+    warmup_n = max(1, int(amount_z_warmup_events))
+
+    if sender_seen < warmup_n:
+        global_mean, global_std = store.global_amount_stats()
+        alpha = float(sender_seen) / float(warmup_n)
+        mean = alpha * sender_mean + (1.0 - alpha) * global_mean
+        std = alpha * sender_std + (1.0 - alpha) * global_std
+    else:
+        mean = sender_mean
+        std = sender_std
+
+    amount_z_raw = (float(event.amount) - float(mean)) / max(float(std), 1.0)
 
     sender_out = float(store.out_degree(event.sender_id))
     receiver_in = float(store.in_degree(event.receiver_id))

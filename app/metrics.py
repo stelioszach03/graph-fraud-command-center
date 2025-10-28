@@ -20,6 +20,21 @@ RISK_SCORE_HIST = Histogram(
     "Distribution of risk scores",
     buckets=(0.0, 0.2, 0.4, 0.6, 0.75, 0.85, 0.92, 1.0),
 )
+HEURISTIC_SCORE_HIST = Histogram(
+    "aegis_heuristic_score",
+    "Distribution of heuristic scores",
+    buckets=(0.0, 0.2, 0.4, 0.6, 0.75, 0.85, 0.92, 1.0),
+)
+MODEL_SCORE_HIST = Histogram(
+    "aegis_model_score",
+    "Distribution of model scores",
+    buckets=(0.0, 0.02, 0.05, 0.1, 0.2, 0.4, 0.6, 0.8, 1.0),
+)
+MODEL_UPLIFT_DELTA_HIST = Histogram(
+    "aegis_model_uplift_delta",
+    "Final score minus heuristic score",
+    buckets=(-0.3, -0.1, -0.05, 0.0, 0.01, 0.03, 0.06, 0.1, 0.2),
+)
 EVENTS_TOTAL = Gauge("aegis_events_total", "Total processed events")
 ALERTS_TOTAL = Gauge("aegis_alerts_total", "Total alert rows")
 NODES_TOTAL = Gauge("aegis_graph_nodes_total", "Total graph nodes")
@@ -31,9 +46,20 @@ def record_http(method: str, path: str, status: int, duration_s: float) -> None:
     REQUEST_LATENCY.labels(method=method, path=path).observe(float(duration_s))
 
 
-def record_score(score: float, high_risk: bool) -> None:
+def record_score(
+    score: float,
+    high_risk: bool,
+    *,
+    heuristic_score: float | None = None,
+    model_score: float | None = None,
+) -> None:
     SCORE_REQUESTS.inc()
     RISK_SCORE_HIST.observe(float(score))
+    if heuristic_score is not None:
+        HEURISTIC_SCORE_HIST.observe(float(heuristic_score))
+        MODEL_UPLIFT_DELTA_HIST.observe(float(score) - float(heuristic_score))
+    if model_score is not None:
+        MODEL_SCORE_HIST.observe(float(model_score))
     if high_risk:
         HIGH_RISK_ALERTS.inc()
 

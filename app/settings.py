@@ -1,5 +1,6 @@
 from functools import lru_cache
 
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -9,7 +10,10 @@ class Settings(BaseSettings):
     API_HOST: str = "0.0.0.0"
     API_PORT: int = 8090
     MODEL_PATH: str = "artifacts/models/edge_model.pt"
-    ALERT_MIN_SCORE: float = 0.75
+    ALERT_MIN_SCORE: float = 0.80
+    MODEL_BLEND_WEIGHT: float = Field(default=0.15, ge=0.0, le=1.0)
+    MODEL_UPLIFT_ONLY: bool = True
+    AMOUNT_Z_WARMUP_EVENTS: int = Field(default=6, ge=1, le=120)
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
