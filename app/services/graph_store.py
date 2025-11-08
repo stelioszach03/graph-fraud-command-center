@@ -214,3 +214,103 @@ class GraphStore:
             if len(out) >= limit:
                 break
         return out
+
+    def clear(self) -> None:
+        """Reset all in-memory state. Used for deterministic demos and tests."""
+        self.graph.clear()
+        self.events.clear()
+        self.alerts.clear()
+
+    def neighborhood(
+        self,
+        node_id: str,
+        depth: int = 1,
+        limit: int = 40,
+    ) -> dict[str, Any] | None:
+        """
+        Return a BFS-expanded neighborhood around `node_id` as a serializable
+        subgraph. Depth is capped at 2 to keep payload small; limit caps the
+        total node count.
+        """
+        if node_id not in self.graph:
+            return None
+
+        depth = max(1, min(2, int(depth)))
+        limit = max(1, int(limit))
+
+        visited: set[str] = {node_id}
+        frontier: set[str] = {node_id}
+
+        for _ in range(depth):
+            next_frontier: set[str] = set()
+            for nid in frontier:
+                for nbr in self.graph.successors(nid):
+                    if nbr not in visited:
+                        next_frontier.add(nbr)
+                for nbr in self.graph.predecessors(nid):
+                    if nbr not in visited:
+                        next_frontier.add(nbr)
+                if len(visited) + len(next_frontier) >= limit:
+                    break
+            visited |= next_frontier
+            if len(visited) >= limit:
+                break
+            frontier = next_frontier
+            if not frontier:
+                break
+
+        # Truncate deterministically if we blew past the cap.
+        node_list = list(visited)
+        if len(node_list) > limit:
+            # Keep the focus + closest seen first
+            node_list = [node_id] + [n for n in node_list if n != node_id]
+            node_list = node_list[:limit]
+        kept = set(node_list)
+
+        nodes: list[dict[str, Any]] = []
+        for nid in node_list:
+            node_data = self.graph.nodes[nid]
+            nodes.append(
+                {
+                    "id": nid,
+                    "in_count": int(node_data.get("in_count", 0)),
+                    "out_count": int(node_data.get("out_count", 0)),
+                    "in_total": float(node_data.get("in_total", 0.0)),
+                    "out_total": float(node_data.get("out_total", 0.0)),
+                    "is_focus": nid == node_id,
+                    "first_seen_utc": _iso(node_data.get("first_seen")),
+                    "last_seen_utc": _iso(node_data.get("last_seen")),
+                }
+            )
+
+        edges: list[dict[str, Any]] = []
+        for u, v, data in self.graph.edges(data=True):
+            if u in kept and v in kept:
+                edges.append(
+                    {
+                        "source": u,
+                        "target": v,
+                        "count": int(data.get("count", 0)),
+                        "total": float(data.get("total", 0.0)),
+                        "last_ts_utc": _iso(data.get("last_ts")),
+                    }
+                )
+
+        return {
+            "focus": node_id,
+            "depth": depth,
+            "nodes": nodes,
+            "edges": edges,
+        }
+
+
+def _iso(value: Any) -> str | None:
+    """Best-effort ISO-8601 serialization for datetimes."""
+    if value is None:
+        return None
+    try:
+        if isinstance(value, datetime):
+            return value.astimezone(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
+    except Exception:
+        return None
+    return None

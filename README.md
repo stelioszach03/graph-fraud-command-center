@@ -1,176 +1,265 @@
-# Aegis Graph Fraud GNN
+<div align="center">
 
-Real-time graph-native fraud ring detection system designed for applied ML/DL portfolios.
+# Aegis · Graph Fraud GNN
 
-Live endpoints:
+**Real-time graph-native fraud detection with a hybrid heuristic + PyTorch GNN scoring engine.**
 
-- Project page: `https://stelioszach.com/graph-fraud-command-center/`
-- API health: `https://stelioszach.com/graph-fraud-command-center/live/health`
-- API docs: `https://stelioszach.com/graph-fraud-command-center/live/docs`
-- Grafana: `https://stelioszach.com/graph-fraud-command-center/monitoring/`
-- Prometheus: `https://stelioszach.com/graph-fraud-command-center/prometheus/`
+[![Python](https://img.shields.io/badge/Python-3.11-3776AB?style=flat-square&logo=python&logoColor=white)](https://www.python.org/)
+[![PyTorch](https://img.shields.io/badge/PyTorch-2.4-EE4C2C?style=flat-square&logo=pytorch&logoColor=white)](https://pytorch.org/)
+[![FastAPI](https://img.shields.io/badge/FastAPI-0.115-009688?style=flat-square&logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
+[![NetworkX](https://img.shields.io/badge/NetworkX-3.3-1f6feb?style=flat-square)](https://networkx.org/)
+[![Prometheus](https://img.shields.io/badge/Prometheus-E6522C?style=flat-square&logo=prometheus&logoColor=white)](https://prometheus.io/)
+[![Grafana](https://img.shields.io/badge/Grafana-F46800?style=flat-square&logo=grafana&logoColor=white)](https://grafana.com/)
+[![Docker](https://img.shields.io/badge/Docker-2496ED?style=flat-square&logo=docker&logoColor=white)](https://www.docker.com/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-f59e0b?style=flat-square)](LICENSE)
+
+**[Live Dashboard](https://stelioszach.com/graph-fraud-command-center/)**  ·  **[API Docs](https://stelioszach.com/graph-fraud-command-center/live/docs)**  ·  **[Grafana](https://stelioszach.com/graph-fraud-command-center/monitoring/)**
+
+</div>
+
+---
+
+## What it does
+
+Every incoming transaction is enriched with **14 graph-context features** — velocity spikes, reverse-edge patterns, mule-flow ratios, first-time relationships, cross-border paths — and scored in sub-4ms by a **hybrid risk engine** that fuses a hand-tuned heuristic with a PyTorch `EdgeMLP` trained on synthetic ring patterns. Every score is explainable, every metric is scraped, every alert is re-callable via API.
+
+> Not a toy. The live deployment serves **457 req/s sustained** with **p95 = 3.3 ms** on a single container.
 
 ## Highlights
 
-- Streaming transaction scoring with graph context.
-- Hybrid risk engine: rule-informed heuristic + PyTorch edge classifier.
-- Self-supervised pretraining (denoising autoencoder) before supervised edge classification.
-- Explainable outputs with reason codes and top contributing signals.
-- FastAPI production API, tests, Docker, CI.
+- **Streaming scorer** — one POST → enriched features → heuristic + GNN → explainable risk band.
+- **Hybrid fusion** — calibrated heuristic (14 weighted features) blended with a PyTorch classifier; `uplift_only` guarantees the model never suppresses a strong rule signal.
+- **Self-supervised pretraining** — denoising autoencoder warms up feature representations before supervised training.
+- **Live graph store** — NetworkX DiGraph with O(1) degree/in-out-total lookups, sliding-window velocity counters, and neighborhood BFS.
+- **Reason codes + top features** — every score returns human-readable reasons and the 6 highest-contributing features.
+- **Operator-grade observability** — 11 Prometheus metrics (histograms for latency, score, model uplift delta; counters for requests, alerts; gauges for graph cardinality).
+- **Zero-dependency frontend** — dark SOC-terminal landing page with live simulation, alert stream, and SVG force graph. No React, no build step, ~40 KB.
+- **Reproducible benchmark + eval** — deterministic quality metrics (precision/recall/F1 by threshold) and latency benchmark scripts.
 
 ## Architecture
 
 ```mermaid
 flowchart LR
-  A[Transaction Stream] --> B[Graph Store]
-  B --> C[Feature Engineering]
-  C --> D[Heuristic Risk Engine]
-  C --> E[PyTorch Edge Model]
-  D --> F[Risk Fusion]
-  E --> F
-  F --> G[Alerts and Investigations API]
-  B --> H[Graph Summary and Telemetry]
+    A["Transaction<br/>Stream"] --> B[GraphStore<br/>NetworkX DiGraph]
+    B --> C[Feature<br/>Engineering]
+    C --> D[Heuristic<br/>Risk Engine]
+    C --> E[PyTorch<br/>EdgeMLP]
+    D --> F{Risk<br/>Fusion}
+    E --> F
+    F --> G[Explain<br/>Reason Codes]
+    G --> H[Alerts API]
+    B --> I[Graph<br/>Summary]
+    F --> J[Prometheus<br/>Metrics]
+    J --> K[Grafana<br/>Dashboards]
 ```
 
-## Core API
+## Features (the 14)
 
-- `GET /health`
-- `GET /metrics`
-- `POST /api/v1/score`
-- `POST /api/v1/simulate?events=250`
-- `GET /api/v1/graph/summary`
-- `GET /api/v1/alerts?min_score=0.80&limit=25`
+| # | Feature | Signal |
+|---|---------|--------|
+| 1 | `log_amount` | magnitude normalized |
+| 2 | `amount_z` | distance from sender's baseline (warmed up via global prior) |
+| 3 | `sender_out_degree` | out-degree of sender |
+| 4 | `receiver_in_degree` | in-degree of receiver |
+| 5 | `sender_velocity_10m` | sender-originated events in last 10 min |
+| 6 | `receiver_velocity_10m` | receiver-absorbing events in last 10 min |
+| 7 | `is_new_pair` | first-time relationship between these two nodes |
+| 8 | `has_reverse_edge` | bidirectional circular flow |
+| 9 | `cross_border` | country_from ≠ country_to |
+| 10 | `channel_risk` | {wire, crypto, cash, ach, card} prior risk |
+| 11 | `sender_receiver_flow_ratio` | mule asymmetry between in-flow and out-flow |
+| 12 | `shared_counterparties` | overlap in sender-successors and receiver-predecessors |
+| 13 | `sender_new_account` | sender first seen in last hour |
+| 14 | `receiver_new_account` | receiver first seen in last hour |
 
-Example score request:
+## API
+
+### Endpoints
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/` | Service info + current graph summary |
+| `GET` | `/health` | Health + model + graph state |
+| `GET` | `/metrics` | Prometheus exposition |
+| `POST` | `/api/v1/score` | Score a single transaction |
+| `POST` | `/api/v1/simulate` | Generate a synthetic stream (events + seed) |
+| `POST` | `/api/v1/reset` | Flush graph/events/alerts for deterministic demos |
+| `GET` | `/api/v1/graph/summary` | Graph cardinality + high-risk last hour |
+| `GET` | `/api/v1/graph/neighborhood/{node_id}` | BFS neighborhood (depth ≤ 2) |
+| `GET` | `/api/v1/alerts` | Latest alerts above threshold |
+
+### Example
+
+```bash
+curl -s -X POST https://stelioszach.com/graph-fraud-command-center/live/api/v1/score \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "sender_id": "ACC_1201",
+    "receiver_id": "RING_007",
+    "amount": 19500,
+    "channel": "crypto",
+    "country_from": "US",
+    "country_to": "AE"
+  }' | jq
+```
 
 ```json
 {
-  "sender_id": "ACC_1201",
-  "receiver_id": "ACC_7782",
-  "amount": 19500,
-  "currency": "USD",
-  "channel": "wire",
-  "country_from": "US",
-  "country_to": "AE"
+  "tx_id": "TX-ab7c2f91e4d308",
+  "risk_score": 0.931,
+  "risk_band": "critical",
+  "model_score": 0.912,
+  "heuristic_score": 0.928,
+  "reasons": [
+    "Amount is far above sender baseline",
+    "First-time relationship between sender and receiver",
+    "Cross-border payment path",
+    "High-risk payment channel"
+  ],
+  "top_features": {
+    "amount_z": 0.9214,
+    "cross_border": 1.0,
+    "channel_risk": 0.92,
+    "is_new_pair": 1.0,
+    "log_amount": 0.861,
+    "sender_velocity_10m": 0.450
+  },
+  "processed_at_utc": "2026-04-15T16:09:43Z"
 }
 ```
 
-## Local Setup
+## Quickstart
+
+### Local (venv)
 
 ```bash
+git clone https://github.com/stelioszach03/graph-fraud-command-center.git
+cd graph-fraud-command-center
 cp .env.example .env
-make setup
-make run
-```
 
-API runs at `http://localhost:8090`.
+make setup   # creates .venv and installs requirements
+make train   # trains EdgeMLP on synthetic data (≈15s)
+make run     # uvicorn on :8090 with reload
 
-Scoring calibration settings are controlled via `.env`:
-
-- `MODEL_BLEND_WEIGHT` (default `0.15`)
-- `MODEL_UPLIFT_ONLY` (default `true`)
-- `AMOUNT_Z_WARMUP_EVENTS` (default `6`)
-
-## Training
-
-Train a synthetic baseline model:
-
-```bash
-make train
-```
-
-Artifacts are stored at `artifacts/models/edge_model.pt`.
-
-## Smoke Test
-
-```bash
+# smoke + benchmark
 make smoke
+make benchmark
 ```
 
-## Docker
-
-```bash
-docker compose up -d --build
-```
-
-Exposed API: `http://localhost:18910`.
-
-Run with monitoring stack:
-
-```bash
-docker compose --profile monitoring up -d --build
-```
-
-Monitoring endpoints:
-
-- Prometheus: `http://localhost:19020`
-- Grafana: `http://localhost:19030` (admin/admin)
-
-VPS deployment profile:
+### Docker
 
 ```bash
 docker compose -f docker-compose.vps.yml up -d --build
 ```
 
-VPS exposed ports:
+Exposed ports: API `18910`, Prometheus `18920`, Grafana `18930`.
 
-- API: `18910`
-- Prometheus: `18920`
-- Grafana: `18930`
+## Benchmarks
 
-## Project Structure
+Reproducible benchmark against the live container (NetworkX in-memory store, no DB):
 
-```text
-app/        FastAPI app, scoring engine, graph store, simulator
-ml/         PyTorch model and self-supervised pretraining modules
-scripts/    Training and smoke utilities
-tests/      API tests
-docker/     Container build files
-monitoring/ Prometheus + Grafana provisioning
-```
+| Metric | Value |
+|--------|-------|
+| Requests | 2 500 |
+| Success | 100.0% |
+| Throughput | **457.4 req/s** |
+| Latency mean | 2.17 ms |
+| Latency p50 | 1.99 ms |
+| Latency p95 | **3.27 ms** |
+| Latency p99 | 4.82 ms |
+| High-risk ratio | 0.86 |
 
-## Benchmark
+Raw: [`benchmarks/benchmark_2026-02-28.json`](benchmarks/benchmark_2026-02-28.json)
 
-Run reproducible benchmark:
+Run it yourself:
 
 ```bash
-python3 scripts/benchmark.py --base-url http://localhost:18910 --requests 2500 --out benchmarks/benchmark_2026-02-28.json
+python3 scripts/benchmark.py --base-url http://localhost:18910 --requests 2500
 ```
 
-The script reports:
-
-- throughput (RPS)
-- latency `mean/p50/p95/p99/max`
-- success rate
-- high-risk ratio
-
-Latest benchmark snapshot (`2026-02-28`, final VPS deployment state):
-
-- requests: `2500`
-- success rate: `100%` (2500/2500)
-- throughput: `457.402 rps`
-- latency mean/p50/p95/p99/max: `2.169ms / 1.987ms / 3.270ms / 4.821ms / 85.213ms`
-- high-risk ratio: `0.8604`
-
-Raw output: `benchmarks/benchmark_2026-02-28.json`
-
 ## Quality Evaluation
-
-Run deterministic quality evaluation on synthetic traffic:
 
 ```bash
 make eval
 ```
 
-This writes `benchmarks/quality_latest.json` with precision/recall/F1 by threshold.
+Writes `benchmarks/quality_latest.json` with precision / recall / F1 across thresholds on a seeded synthetic stream. Current operating point: `alert_min_score = 0.80` with `MODEL_UPLIFT_ONLY = true`.
+
+## Observability
+
+Every request records:
+- `aegis_http_requests_total{method,path,status}`
+- `aegis_http_request_duration_seconds{method,path}` — histogram
+- `aegis_risk_score` — histogram
+- `aegis_heuristic_score` — histogram
+- `aegis_model_score` — histogram
+- `aegis_model_uplift_delta` — histogram of `final − heuristic`
+- `aegis_high_risk_alerts_total`
+- `aegis_score_requests_total`
+- `aegis_graph_nodes_total`, `aegis_graph_edges_total`
+- `aegis_events_total`, `aegis_alerts_total`
+
+Prometheus scrapes `/metrics` → Grafana dashboard auto-provisioned under `monitoring/grafana/dashboards/aegis-overview.json`.
+
+## Project Layout
+
+```text
+app/
+├── main.py                    FastAPI routes, middleware, CORS
+├── schemas.py                 Pydantic request/response models
+├── settings.py                Env-driven configuration
+├── metrics.py                 Prometheus histograms + counters + gauges
+└── services/
+    ├── graph_store.py         NetworkX store + neighborhood BFS
+    ├── feature_engineering.py 14 edge-level features
+    ├── scoring.py             Heuristic + GNN fusion engine
+    ├── explain.py             Reason codes + top features
+    └── simulator.py           Synthetic fraud-laced stream
+
+ml/
+├── gnn.py                     EdgeMLP + trainer + checkpoint I/O
+└── self_supervised.py         Denoising autoencoder pretraining
+
+scripts/
+├── train_synthetic.py         End-to-end training pipeline
+├── benchmark.py               Concurrent latency benchmark
+├── evaluate_quality.py        Precision/recall/F1 sweep
+└── smoke.sh                   End-to-end curl smoke test
+
+tests/                         Pytest suite (score, health, quality)
+monitoring/                    Prometheus + Grafana provisioning
+docker/                        Dockerfile.api
+```
+
+## Configuration
+
+Configured via `.env` (see `.env.example`):
+
+| Variable | Default | Purpose |
+|----------|---------|---------|
+| `APP_ENV` | `dev` | logging + behavior flags |
+| `APP_VERSION` | `0.2.0` | reported in `/` and `/health` |
+| `MODEL_PATH` | `artifacts/models/edge_model.pt` | checkpoint path |
+| `ALERT_MIN_SCORE` | `0.80` | threshold for high-risk alert routing |
+| `MODEL_BLEND_WEIGHT` | `0.15` | weight of GNN in final score |
+| `MODEL_UPLIFT_ONLY` | `true` | model can only raise, never suppress |
+| `AMOUNT_Z_WARMUP_EVENTS` | `6` | blend with global prior under this sender-event count |
+| `CORS_ALLOW_ORIGINS` | `*` | comma-separated allowlist |
 
 ## Roadmap
 
-- Replace synthetic generator with Kafka ingestion connector.
-- Add temporal GNN (GraphSAGE/GAT) with neighbor mini-batching.
-- Add analyst UI for case graph exploration and path explanations.
-- Add drift monitoring dashboards (population shift, alert precision proxy).
+- [ ] Replace synthetic generator with Kafka ingestion connector
+- [ ] Temporal GNN (GraphSAGE / GAT) with neighbor mini-batching
+- [ ] Analyst UI for case graph exploration + path-level explanations
+- [ ] Drift monitoring dashboards (population shift, alert precision proxy)
+- [ ] Shadow-mode A/B for model iteration under production traffic
 
-## License
+---
 
-MIT
+<div align="center">
+
+Built by **[Stelios Zacharioudakis](https://stelioszach.com)** · ML Engineer & Researcher · Athens → Toronto
+
+[Portfolio](https://stelioszach.com) · [GitHub](https://github.com/stelioszach03) · [LinkedIn](https://www.linkedin.com/in/stylianos-georgios-zacharioudakis-47024428a)
+
+</div>
