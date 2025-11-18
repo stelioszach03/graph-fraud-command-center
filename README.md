@@ -1,5 +1,7 @@
 <div align="center">
 
+[![CI](https://github.com/stelioszach03/graph-fraud-command-center/actions/workflows/ci.yml/badge.svg)](https://github.com/stelioszach03/graph-fraud-command-center/actions)
+
 # Aegis · Graph Fraud GNN
 
 **Real-time graph-native fraud detection with a hybrid heuristic + PyTorch GNN scoring engine.**
