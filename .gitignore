@@ -1,0 +1,28 @@
+# Python
+__pycache__/
+*.py[cod]
+*.so
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+venv/
+
+# Environment
+.env
+.env.*
+
+# Build
+build/
+dist/
+*.egg-info/
+
+# Artifacts
+artifacts/
+models/
+*.pt
+*.pth
+
+# Frontend / misc
+node_modules/
+.DS_Store

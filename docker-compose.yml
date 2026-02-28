@@ -1,0 +1,17 @@
+services:
+  api:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.api
+    ports:
+      - "18910:8090"
+    environment:
+      - APP_ENV=prod
+      - APP_VERSION=0.1.0
+      - MODEL_PATH=/app/artifacts/models/edge_model.pt
+      - ALERT_MIN_SCORE=0.82
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8090/health >/dev/null 2>&1 || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 8
