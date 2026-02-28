@@ -5,13 +5,12 @@ from datetime import datetime, timedelta, timezone
 
 from .graph_store import TxEvent
 
-
 CHANNELS = ["wire", "ach", "card", "crypto", "cash"]
 COUNTRIES = ["US", "US", "US", "US", "GB", "CY", "AE", "SG"]
 
 
-def generate_stream(n: int, seed: int = 42) -> list[TxEvent]:
-    rng = random.Random(seed)
+def generate_stream(n: int, seed: int | None = None) -> list[TxEvent]:
+    rng = random.Random(seed) if seed is not None else random.Random()
     accounts = [f"ACC_{i:04d}" for i in range(1, 350)]
     ring = [f"RING_{i:03d}" for i in range(1, 15)]
 
@@ -20,19 +19,19 @@ def generate_stream(n: int, seed: int = 42) -> list[TxEvent]:
 
     for i in range(max(1, int(n))):
         ts = base + timedelta(seconds=i * rng.uniform(1.0, 7.5))
-        suspicious = rng.random() < 0.16
+        suspicious = rng.random() < 0.14
 
         if suspicious:
             sender = rng.choice(ring)
             receiver = rng.choice([x for x in ring if x != sender])
-            amount = rng.uniform(7_500, 48_000)
+            amount = rng.uniform(4_500, 32_000)
             channel = rng.choice(["wire", "crypto", "cash"])
             country_from = rng.choice(["US", "GB", "CY"])
             country_to = rng.choice(["AE", "SG", "CY", "US"])
         else:
             sender = rng.choice(accounts)
             receiver = rng.choice([x for x in accounts if x != sender])
-            amount = rng.lognormvariate(5.9, 0.9)
+            amount = rng.lognormvariate(5.7, 0.85)
             channel = rng.choice(CHANNELS)
             country_from = rng.choice(COUNTRIES)
             country_to = rng.choice(COUNTRIES)

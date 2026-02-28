@@ -2,7 +2,6 @@ from fastapi.testclient import TestClient
 
 from app.main import app
 
-
 client = TestClient(app)
 
 
@@ -12,6 +11,7 @@ def test_health_ok():
     data = r.json()
     assert data["status"] == "ok"
     assert "timestamp_utc" in data
+    assert "model_loaded" in data
 
 
 def test_metrics_endpoint():

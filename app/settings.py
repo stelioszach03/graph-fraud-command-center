@@ -9,7 +9,7 @@ class Settings(BaseSettings):
     API_HOST: str = "0.0.0.0"
     API_PORT: int = 8090
     MODEL_PATH: str = "artifacts/models/edge_model.pt"
-    ALERT_MIN_SCORE: float = 0.82
+    ALERT_MIN_SCORE: float = 0.75
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 

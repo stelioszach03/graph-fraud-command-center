@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from typing import Iterable
 
-
 HUMAN_LABEL = {
     "amount_z": "Amount is far above sender baseline",
     "sender_velocity_10m": "Sender velocity spike in last 10m",
@@ -33,6 +32,7 @@ def reasons_from_contributions(
             break
         if name not in HUMAN_LABEL:
             continue
+
         value = float(feature_map.get(name, 0.0))
         if value <= 0 and name not in {"amount_z"}:
             continue
