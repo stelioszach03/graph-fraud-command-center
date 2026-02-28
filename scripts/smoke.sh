@@ -30,4 +30,8 @@ curl -fsS "${BASE_URL}/api/v1/graph/summary" >/tmp/summary_out.json
 grep -q 'events_total' /tmp/summary_out.json
 echo "[ok] /api/v1/graph/summary"
 
+curl -fsS "${BASE_URL}/metrics" >/tmp/metrics_out.txt
+grep -q 'aegis_http_requests_total' /tmp/metrics_out.txt
+echo "[ok] /metrics"
+
 echo "[smoke] PASS"

@@ -7,5 +7,6 @@ echo "[healthtest] base_url=${BASE_URL}"
 
 curl -fsS "${BASE_URL}/health" | python3 -c 'import json,sys; d=json.load(sys.stdin); assert d["status"]=="ok"; print("[ok] /health")'
 curl -fsS "${BASE_URL}/api/v1/graph/summary" | python3 -c 'import json,sys; d=json.load(sys.stdin); assert "events_total" in d; print("[ok] /api/v1/graph/summary")'
+curl -fsS "${BASE_URL}/metrics" | grep -q "aegis_http_requests_total" && echo "[ok] /metrics"
 
 echo "[healthtest] PASS"

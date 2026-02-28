@@ -7,9 +7,48 @@ services:
       - .env
     ports:
       - "18910:8090"
+    volumes:
+      - ./artifacts:/app/artifacts
     restart: unless-stopped
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://localhost:8090/health >/dev/null 2>&1 || exit 1"]
+      test:
+        [
+          "CMD-SHELL",
+          "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8090/health', timeout=3).read()\" || exit 1"
+        ]
       interval: 15s
       timeout: 5s
       retries: 8
+
+  prometheus:
+    image: prom/prometheus:v2.54.1
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+    volumes:
+      - ./monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    depends_on:
+      api:
+        condition: service_started
+    ports:
+      - "18920:9090"
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:11.1.5
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_SERVER_ROOT_URL=https://stelioszach.com/aegis-graph-fraud-gnn/monitoring/
+      - GF_SERVER_DOMAIN=stelioszach.com
+      - GF_SERVER_SERVE_FROM_SUB_PATH=true
+    volumes:
+      - ./monitoring/grafana/provisioning/datasources:/etc/grafana/provisioning/datasources:ro
+      - ./monitoring/grafana/provisioning/dashboards:/etc/grafana/provisioning/dashboards:ro
+      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    depends_on:
+      prometheus:
+        condition: service_started
+    ports:
+      - "18930:3000"
+    restart: unless-stopped

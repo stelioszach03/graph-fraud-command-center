@@ -12,3 +12,9 @@ def test_health_ok():
     data = r.json()
     assert data["status"] == "ok"
     assert "timestamp_utc" in data
+
+
+def test_metrics_endpoint():
+    r = client.get("/metrics")
+    assert r.status_code == 200
+    assert "aegis_http_requests_total" in r.text
