@@ -4,11 +4,11 @@ Real-time graph-native fraud ring detection system designed for applied ML/DL po
 
 Live endpoints:
 
-- Project page: `https://stelioszach.com/aegis-graph-fraud-gnn/`
-- API health: `https://stelioszach.com/aegis-graph-fraud-gnn/live/health`
-- API docs: `https://stelioszach.com/aegis-graph-fraud-gnn/live/docs`
-- Grafana: `https://stelioszach.com/aegis-graph-fraud-gnn/monitoring/`
-- Prometheus: `https://stelioszach.com/aegis-graph-fraud-gnn/prometheus/`
+- Project page: `https://stelioszach.com/graph-fraud-command-center/`
+- API health: `https://stelioszach.com/graph-fraud-command-center/live/health`
+- API docs: `https://stelioszach.com/graph-fraud-command-center/live/docs`
+- Grafana: `https://stelioszach.com/graph-fraud-command-center/monitoring/`
+- Prometheus: `https://stelioszach.com/graph-fraud-command-center/prometheus/`
 
 ## Highlights
 
@@ -39,7 +39,7 @@ flowchart LR
 - `POST /api/v1/score`
 - `POST /api/v1/simulate?events=250`
 - `GET /api/v1/graph/summary`
-- `GET /api/v1/alerts?min_score=0.82&limit=25`
+- `GET /api/v1/alerts?min_score=0.80&limit=25`
 
 Example score request:
 
@@ -64,6 +64,12 @@ make run
 ```
 
 API runs at `http://localhost:8090`.
+
+Scoring calibration settings are controlled via `.env`:
+
+- `MODEL_BLEND_WEIGHT` (default `0.15`)
+- `MODEL_UPLIFT_ONLY` (default `true`)
+- `AMOUNT_Z_WARMUP_EVENTS` (default `6`)
 
 ## Training
 
@@ -147,6 +153,16 @@ Latest benchmark snapshot (`2026-02-28`, final VPS deployment state):
 - high-risk ratio: `0.8604`
 
 Raw output: `benchmarks/benchmark_2026-02-28.json`
+
+## Quality Evaluation
+
+Run deterministic quality evaluation on synthetic traffic:
+
+```bash
+make eval
+```
+
+This writes `benchmarks/quality_latest.json` with precision/recall/F1 by threshold.
 
 ## Roadmap
 
