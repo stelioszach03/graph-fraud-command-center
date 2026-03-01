@@ -49,10 +49,21 @@ def _risk_band(score: float) -> str:
 
 
 class FraudScoringService:
-    def __init__(self, store: GraphStore, model_path: str, alert_min_score: float = 0.82) -> None:
+    def __init__(
+        self,
+        store: GraphStore,
+        model_path: str,
+        alert_min_score: float = 0.82,
+        model_blend_weight: float = 0.15,
+        model_uplift_only: bool = True,
+        amount_z_warmup_events: int = 6,
+    ) -> None:
         self.store = store
         self.model_path = model_path
         self.alert_min_score = float(alert_min_score)
+        self.model_blend_weight = _clip01(float(model_blend_weight))
+        self.model_uplift_only = bool(model_uplift_only)
+        self.amount_z_warmup_events = max(1, int(amount_z_warmup_events))
         self.model: EdgeMLP | None = self._load_model(model_path)
 
     @staticmethod
@@ -90,14 +101,21 @@ class FraudScoringService:
         return _clip01(float(prob))
 
     def score(self, event: TxEvent) -> dict:
-        vector, feature_map = build_edge_features(self.store, event)
+        vector, feature_map = build_edge_features(
+            self.store,
+            event,
+            amount_z_warmup_events=self.amount_z_warmup_events,
+        )
         heuristic_score, weighted = self._heuristic_score(feature_map)
         model_score = self._model_score(vector)
 
         if model_score is None:
             final = heuristic_score
         else:
-            final = _clip01(0.85 * heuristic_score + 0.15 * model_score)
+            heuristic_w = 1.0 - self.model_blend_weight
+            blended = _clip01((heuristic_w * heuristic_score) + (self.model_blend_weight * model_score))
+            # Prevent low-confidence model outputs from suppressing strong rule signal.
+            final = max(heuristic_score, blended) if self.model_uplift_only else blended
 
         band = _risk_band(final)
         reasons = reasons_from_contributions(weighted=weighted, feature_map=feature_map)

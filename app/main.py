@@ -20,6 +20,9 @@ scorer = FraudScoringService(
     store=store,
     model_path=settings.MODEL_PATH,
     alert_min_score=settings.ALERT_MIN_SCORE,
+    model_blend_weight=settings.MODEL_BLEND_WEIGHT,
+    model_uplift_only=settings.MODEL_UPLIFT_ONLY,
+    amount_z_warmup_events=settings.AMOUNT_Z_WARMUP_EVENTS,
 )
 
 
@@ -76,6 +79,8 @@ def score_transaction(payload: ScoreRequest) -> ScoreResponse:
     record_score(
         score=risk_score,
         high_risk=risk_score >= settings.ALERT_MIN_SCORE,
+        heuristic_score=float(result["heuristic_score"]),
+        model_score=(float(result["model_score"]) if result["model_score"] is not None else None),
     )
     set_graph_gauges(store.summary())
     return ScoreResponse(**result)
@@ -111,6 +116,10 @@ def simulate(
         record_score(
             score=risk_score,
             high_risk=risk_score >= settings.ALERT_MIN_SCORE,
+            heuristic_score=float(score_payload["heuristic_score"]),
+            model_score=(
+                float(score_payload["model_score"]) if score_payload["model_score"] is not None else None
+            ),
         )
 
     alerts_after = len(store.alerts)

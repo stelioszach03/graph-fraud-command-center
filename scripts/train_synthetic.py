@@ -2,14 +2,14 @@ from __future__ import annotations
 
 import argparse
 import os
+import sys
+from pathlib import Path
 
 import numpy as np
 
-from app.services.feature_engineering import FEATURE_ORDER, build_edge_features
-from app.services.graph_store import GraphStore
-from app.services.simulator import generate_stream
-from ml.gnn import save_edge_model, train_edge_model
-from ml.self_supervised import pretrain_dae
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
 
 
 def _label_rule(tx) -> float:
@@ -22,6 +22,12 @@ def _label_rule(tx) -> float:
 
 
 def main() -> None:
+    from app.services.feature_engineering import FEATURE_ORDER, build_edge_features
+    from app.services.graph_store import GraphStore
+    from app.services.simulator import generate_stream
+    from ml.gnn import save_edge_model, train_edge_model
+    from ml.self_supervised import pretrain_dae
+
     parser = argparse.ArgumentParser(description="Train edge fraud model on synthetic graph stream")
     parser.add_argument("--samples", type=int, default=15000)
     parser.add_argument("--epochs", type=int, default=10)
@@ -44,6 +50,10 @@ def main() -> None:
 
     x = np.vstack(features).astype(np.float32)
     y = np.asarray(labels, dtype=np.float32)
+    rng = np.random.default_rng(int(args.seed))
+    order = rng.permutation(x.shape[0])
+    x = x[order]
+    y = y[order]
 
     # Lightweight self-supervised pretraining step for representation stabilization.
     _, dae_loss = pretrain_dae(x, epochs=3, batch_size=768)
@@ -69,6 +79,8 @@ def main() -> None:
     print("[train] features:", len(FEATURE_ORDER))
     print("[train] dae_loss:", round(float(dae_loss), 6))
     print("[train] metrics:", metrics)
+    print("[train] pos_ratio_train:", round(float(y_train.mean()), 6))
+    print("[train] pos_ratio_val:", round(float(y_val.mean()), 6))
 
 
 if __name__ == "__main__":

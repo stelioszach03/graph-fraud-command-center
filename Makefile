@@ -3,7 +3,7 @@ VENV := .venv
 PIP := $(VENV)/bin/pip
 PYBIN := $(VENV)/bin/python
 
-.PHONY: setup run lint test train smoke benchmark
+.PHONY: setup run lint test train smoke benchmark eval
 
 setup:
 	$(PY) -m venv $(VENV)
@@ -27,3 +27,6 @@ smoke:
 
 benchmark:
 	$(PYBIN) scripts/benchmark.py --base-url http://localhost:8090 --requests 2000 --out benchmarks/latest.json
+
+eval:
+	$(PYBIN) scripts/evaluate_quality.py --events 3000 --seed 123 --out benchmarks/quality_latest.json

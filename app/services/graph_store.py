@@ -130,6 +130,33 @@ class GraphStore:
         std = (var ** 0.5) if var > 1e-8 else 1.0
         return mean, std
 
+    def sender_event_count(self, sender_id: str) -> int:
+        if sender_id not in self.graph:
+            return 0
+        node = self.graph.nodes[sender_id]
+        return int(node.get("out_count", 0))
+
+    def global_amount_stats(
+        self,
+        lookback: int = 4000,
+        prior_mean: float = 1200.0,
+        prior_std: float = 2500.0,
+    ) -> tuple[float, float]:
+        vals: list[float] = []
+        limit = max(50, int(lookback))
+        for row in reversed(self.events):
+            vals.append(float(row["amount"]))
+            if len(vals) >= limit:
+                break
+
+        if len(vals) < 30:
+            return float(prior_mean), float(max(1.0, prior_std))
+
+        mean = sum(vals) / len(vals)
+        var = sum((v - mean) ** 2 for v in vals) / max(1, len(vals) - 1)
+        std = (var ** 0.5) if var > 1e-8 else 1.0
+        return mean, std
+
     def recent_count(self, account_id: str, seconds: int, direction: str = "sender") -> int:
         if seconds <= 0:
             return 0

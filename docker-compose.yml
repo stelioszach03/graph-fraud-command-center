@@ -9,7 +9,7 @@ services:
       - APP_ENV=prod
       - APP_VERSION=0.1.0
       - MODEL_PATH=/app/artifacts/models/edge_model.pt
-      - ALERT_MIN_SCORE=0.82
+      - ALERT_MIN_SCORE=0.80
     volumes:
       - ./artifacts:/app/artifacts
     healthcheck:

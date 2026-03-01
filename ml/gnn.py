@@ -5,7 +5,6 @@ import os
 import numpy as np
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 
 
 class EdgeMLP(nn.Module):
@@ -45,6 +44,10 @@ def train_edge_model(
     ytr = torch.tensor(y_train, dtype=torch.float32)
     xva = torch.tensor(x_val, dtype=torch.float32)
     yva = torch.tensor(y_val, dtype=torch.float32)
+    pos = float(ytr.sum().item())
+    neg = float(ytr.numel() - pos)
+    pos_weight_value = neg / max(pos, 1.0)
+    criterion = nn.BCEWithLogitsLoss(pos_weight=torch.tensor(pos_weight_value, dtype=torch.float32))
 
     bsz = max(64, int(batch_size))
     ep = max(1, int(epochs))
@@ -60,15 +63,16 @@ def train_edge_model(
             yb = ytr[idx]
             optimizer.zero_grad(set_to_none=True)
             logits = model(xb)
-            loss = F.binary_cross_entropy_with_logits(logits, yb)
+            loss = criterion(logits, yb)
             loss.backward()
+            torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=2.0)
             optimizer.step()
             last_train = float(loss.item())
 
         model.eval()
         with torch.no_grad():
             val_logits = model(xva)
-            val_loss = F.binary_cross_entropy_with_logits(val_logits, yva)
+            val_loss = criterion(val_logits, yva)
             last_val = float(val_loss.item())
 
     with torch.no_grad():
@@ -80,6 +84,7 @@ def train_edge_model(
         "train_loss": round(last_train, 6),
         "val_loss": round(last_val, 6),
         "val_accuracy": round(accuracy, 6),
+        "pos_weight": round(float(pos_weight_value), 6),
     }
     return model, metrics
 
@@ -91,7 +96,10 @@ def save_edge_model(model: EdgeMLP, path: str) -> None:
 
 def load_edge_model(path: str, input_dim: int) -> EdgeMLP:
     model = EdgeMLP(input_dim=input_dim)
-    payload = torch.load(path, map_location="cpu")
+    try:
+        payload = torch.load(path, map_location="cpu", weights_only=True)
+    except TypeError:
+        payload = torch.load(path, map_location="cpu")
     state = payload.get("state_dict") if isinstance(payload, dict) else payload
     if not isinstance(state, dict):
         raise ValueError("invalid model checkpoint")

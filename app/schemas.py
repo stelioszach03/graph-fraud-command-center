@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Literal
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class ScoreRequest(BaseModel):
@@ -26,6 +26,8 @@ class ScoreRequest(BaseModel):
 
 
 class ScoreResponse(BaseModel):
+    model_config = ConfigDict(protected_namespaces=())
+
     tx_id: str
     risk_score: float
     risk_band: Literal["low", "medium", "high", "critical"]
