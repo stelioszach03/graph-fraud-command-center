@@ -2,9 +2,9 @@
 
 [![CI](https://github.com/stelioszach03/graph-fraud-command-center/actions/workflows/ci.yml/badge.svg)](https://github.com/stelioszach03/graph-fraud-command-center/actions)
 
-# Aegis · Graph Fraud GNN
+# Aegis · Graph Fraud Command Center
 
-**Real-time graph-native fraud detection with a hybrid heuristic + PyTorch GNN scoring engine.**
+**Real-time graph-native fraud scoring: 14 topology features, a hybrid heuristic + PyTorch MLP engine, and an operator console.**
 
 [![Python](https://img.shields.io/badge/Python-3.11-3776AB?style=flat-square&logo=python&logoColor=white)](https://www.python.org/)
 [![PyTorch](https://img.shields.io/badge/PyTorch-2.4-EE4C2C?style=flat-square&logo=pytorch&logoColor=white)](https://pytorch.org/)
@@ -23,14 +23,21 @@
 
 ## What it does
 
-Every incoming transaction is enriched with **14 graph-context features** — velocity spikes, reverse-edge patterns, mule-flow ratios, first-time relationships, cross-border paths — and scored in sub-4ms by a **hybrid risk engine** that fuses a hand-tuned heuristic with a PyTorch `EdgeMLP` trained on synthetic ring patterns. Every score is explainable, every metric is scraped, every alert is re-callable via API.
+Every incoming transaction is enriched with **14 graph-context features** — velocity spikes, reverse-edge patterns, mule-flow ratios, first-time relationships, cross-border paths — and scored by a **hybrid risk engine** that fuses a hand-tuned heuristic with a PyTorch `EdgeMLP` trained on synthetic ring patterns. Every score is explainable, every metric is scraped, every alert is re-callable via API.
 
-> Not a toy. The live deployment serves **457 req/s sustained** with **p95 = 3.3 ms** on a single container.
+> **Measured load test** (not a production figure): **457.4 req/s**, **p95 3.27 ms**,
+> 0 errors over **2 500 requests** — single container against `http://localhost:18910`,
+> in-memory NetworkX graph store, no database.
+> Raw JSON: [`benchmarks/benchmark_2026-02-28.json`](benchmarks/benchmark_2026-02-28.json).
+
+> **`EdgeMLP` is a plain MLP over the 14 engineered edge features — not a
+> message-passing GNN.** There is no PyG or DGL here, and it is trained on
+> synthetically generated ring patterns.
 
 ## Highlights
 
-- **Streaming scorer** — one POST → enriched features → heuristic + GNN → explainable risk band.
-- **Hybrid fusion** — calibrated heuristic (14 weighted features) blended with a PyTorch classifier; `uplift_only` guarantees the model never suppresses a strong rule signal.
+- **Streaming scorer** — one POST → enriched features → heuristic + model → explainable risk band.
+- **Hybrid fusion** — hand-tuned heuristic (14 weighted features) blended with a PyTorch classifier at weight 0.15; `uplift_only` guarantees the model never suppresses a strong rule signal.
 - **Self-supervised pretraining** — denoising autoencoder warms up feature representations before supervised training.
 - **Live graph store** — NetworkX DiGraph with O(1) degree/in-out-total lookups, sliding-window velocity counters, and neighborhood BFS.
 - **Reason codes + top features** — every score returns human-readable reasons and the 6 highest-contributing features.
@@ -158,7 +165,10 @@ Exposed ports: API `18910`, Prometheus `18920`, Grafana `18930`.
 
 ## Benchmarks
 
-Reproducible benchmark against the live container (NetworkX in-memory store, no DB):
+Conditions, so the numbers mean something: **single container on `localhost:18910`**,
+NetworkX in-memory graph store, **no database**, **2 500 requests**, run 2026-02-28.
+This measures the scoring path on one machine — it is not a distributed or
+production-traffic result.
 
 | Metric | Value |
 |--------|-------|
@@ -185,7 +195,14 @@ python3 scripts/benchmark.py --base-url http://localhost:18910 --requests 2500
 make eval
 ```
 
-Writes `benchmarks/quality_latest.json` with precision / recall / F1 across thresholds on a seeded synthetic stream. Current operating point: `alert_min_score = 0.80` with `MODEL_UPLIFT_ONLY = true`.
+Writes `benchmarks/quality_latest.json` locally — **it is not committed, and
+deliberately so.** The labels come from `_label_rule()` in
+[`scripts/evaluate_quality.py`](scripts/evaluate_quality.py), applied to a stream
+produced by the repo's own simulator. Those precision/recall/F1 numbers measure
+**agreement between the scorer and a hand-written rule on synthetic data** — they
+say nothing about real fraud detection, so publishing them as a headline metric
+would be misleading. Run it yourself to tune thresholds; current operating point
+is `alert_min_score = 0.80` with `MODEL_UPLIFT_ONLY = true`.
 
 ## Observability
 
@@ -247,6 +264,21 @@ Configured via `.env` (see `.env.example`):
 | `MODEL_UPLIFT_ONLY` | `true` | model can only raise, never suppress |
 | `AMOUNT_Z_WARMUP_EVENTS` | `6` | blend with global prior under this sender-event count |
 | `CORS_ALLOW_ORIGINS` | `*` | comma-separated allowlist |
+
+## Limitations
+
+- **All data is synthetic**, generated by `app/services/simulator.py`. No real
+  transaction data has ever passed through this service.
+- **No detection-quality claim.** See *Quality Evaluation* above — the only
+  available labels are rule-generated, so agreement with them is not accuracy.
+- **`EdgeMLP` is an MLP, not a GNN.** Graph structure enters only through the 14
+  precomputed features; there is no neighbourhood aggregation in the model.
+- **The benchmark is single-container, in-memory, localhost.** No database, no
+  network hop, no concurrency beyond the load script.
+- **State is in-process.** Restarting the API empties the graph; there is no
+  persistence layer.
+
+---
 
 ## Roadmap
 
